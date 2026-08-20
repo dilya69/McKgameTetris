@@ -846,44 +846,35 @@ function setColumnTarget(target) {
 }
 
 // ---------- ИСПРАВЛЕННЫЙ ПОВОРОТ (с полной поддержкой Wall Kick) ----------
+// ---------- ИСПРАВЛЕННЫЙ ПОВОРОТ (с учётом смещения minX и wall-kick) ----------
 function rotatePiece() {
   if (over || !current || clearing || paused) return;
-  
+
   const oldRot = currentRot;
   const newRot = (currentRot + 1) % 4;
   const shape = SHAPES[current];
-  
-  // Получаем ширину фигуры в старом и новом положении
-  function getShapeWidth(rot) {
-    let minX = Infinity, maxX = -Infinity;
-    shape[rot].forEach(([dx, dy]) => {
-      if (dx < minX) minX = dx;
-      if (dx > maxX) maxX = dx;
-    });
-    return maxX - minX + 1;
+
+  // вычисляем minX для ориентации rot
+  function minXFor(rot) {
+    let min = Infinity;
+    shape[rot].forEach(([dx, dy]) => { if (dx < min) min = dx; });
+    return min === Infinity ? 0 : min;
   }
-  
-  const oldWidth = getShapeWidth(oldRot);
-  const newWidth = getShapeWidth(newRot);
-  
-  // Список возможных смещений (X)
-  let kickOffsets = [0];
-  
-  // Если ширина меняется, добавляем смещения для прижатия к краю
-  if (newWidth > oldWidth) {
-    // Фигура становится шире — пробуем сместить влево
-    kickOffsets = [0, -1, -2, 1];
-  } else if (newWidth < oldWidth) {
-    // Фигура становится уже — пробуем сместить вправо
-    kickOffsets = [0, 1, 2, -1];
-  } else {
-    // Ширина не меняется — стандартные кики
-    kickOffsets = [0, -1, 1, -2, 2];
-  }
-  
-  // Пробуем все смещения
-  for (const offset of kickOffsets) {
-    const testX = currentX + offset;
+
+  const oldMin = minXFor(oldRot);
+  const newMin = minXFor(newRot);
+  // если minX изменился, это смещение нужно учесть при тестах
+  const baseDeltaX = oldMin - newMin;
+
+  // выбираем базовые кики: сначала используем WALL_KICKS если есть, иначе дефолт
+  const fromWall = (WALL_KICKS[current] && WALL_KICKS[current][oldRot]) ||
+                    (WALL_KICKS['default'] && WALL_KICKS['default'][oldRot]) ||
+                    [0, -1, 1, -2, 2];
+  const kicks = Array.isArray(fromWall) ? fromWall : [0];
+
+  // пробуем все смещения по X с учётом baseDeltaX
+  for (const offset of kicks) {
+    const testX = currentX + offset + baseDeltaX;
     if (!collide(current, newRot, testX, currentY)) {
       currentRot = newRot;
       currentX = testX;
@@ -891,20 +882,22 @@ function rotatePiece() {
       return;
     }
   }
-  
-  // Если ничего не помогло — пробуем смещение по Y (для I-фигуры)
-  if (current === 'I') {
-    for (const offset of [-1, 1, -2, 2]) {
-      if (!collide(current, newRot, currentX, currentY + offset)) {
+
+  // Если ничего не помогло, пробуем сдвиги по Y (полезно для I-фигуры и крайних случаев)
+  const yKicks = current === 'I' ? [-1, 1, -2, 2] : [-1, 1];
+  for (const dy of yKicks) {
+    for (const offset of kicks) {
+      const testX = currentX + offset + baseDeltaX;
+      if (!collide(current, newRot, testX, currentY + dy)) {
         currentRot = newRot;
-        currentY += offset;
+        currentX = testX;
+        currentY += dy;
         soundRotate();
         return;
       }
     }
   }
 }
-
 function softDrop() {
   if (over || !current || clearing || paused) return;
   if (!collide(current, currentRot, currentX, currentY + 1)) {
