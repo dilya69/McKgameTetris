@@ -397,7 +397,7 @@
       </div>
 
       <div class="overlay" id="gameOverOverlay">
-        <h2>ИГРА ОКОНЧЕНА</h2>
+        <h2>ИГРА пиздец</h2>
         <p class="score-text">Счёт: <strong id="gameOverScore">0</strong></p>
         <div class="overlay-actions">
           <button class="pill" id="gameOverRestart">🔄 Попробовать снова</button>
@@ -846,35 +846,64 @@ function setColumnTarget(target) {
 }
 
 // ---------- ИСПРАВЛЕННЫЙ ПОВОРОТ (с полной поддержкой Wall Kick) ----------
-// ---------- ИСПРАВЛЕННЫЙ ПОВОРОТ (с учётом смещения minX и wall-kick) ----------
 function rotatePiece() {
   if (over || !current || clearing || paused) return;
 
   const oldRot = currentRot;
   const newRot = (currentRot + 1) % 4;
-  const shape = SHAPES[current];
+  const shape = SHAPES[current][newRot];
 
-  // вычисляем minX для ориентации rot
-  function minXFor(rot) {
-    let min = Infinity;
-    shape[rot].forEach(([dx, dy]) => { if (dx < min) min = dx; });
-    return min === Infinity ? 0 : min;
+  /*
+   * ВАЖНО:
+   * currentX — это координата начала системы координат фигуры,
+   * а не обязательно координата её самой левой клетки.
+   *
+   * Поэтому после поворота нельзя ориентироваться только
+   * на ширину старой/новой фигуры.
+   *
+   * Сначала смотрим реальные dx новой ориентации.
+   */
+  let minX = Infinity;
+  let maxX = -Infinity;
+
+  for (const [dx] of shape) {
+    if (dx < minX) minX = dx;
+    if (dx > maxX) maxX = dx;
   }
 
-  const oldMin = minXFor(oldRot);
-  const newMin = minXFor(newRot);
-  // если minX изменился, это смещение нужно учесть при тестах
-  const baseDeltaX = oldMin - newMin;
+  /*
+   * Сначала принудительно помещаем НОВУЮ ориентацию
+   * внутрь игрового поля.
+   *
+   * Это решает баг:
+   * горизонтальная I-фигура стоит у края -> поворот ->
+   * игра продолжает считать старую горизонтальную позицию.
+   */
+  let baseX = currentX;
 
-  // выбираем базовые кики: сначала используем WALL_KICKS если есть, иначе дефолт
-  const fromWall = (WALL_KICKS[current] && WALL_KICKS[current][oldRot]) ||
-                    (WALL_KICKS['default'] && WALL_KICKS['default'][oldRot]) ||
-                    [0, -1, 1, -2, 2];
-  const kicks = Array.isArray(fromWall) ? fromWall : [0];
+  if (baseX + minX < 0) {
+    baseX -= baseX + minX;
+  }
 
-  // пробуем все смещения по X с учётом baseDeltaX
-  for (const offset of kicks) {
-    const testX = currentX + offset + baseDeltaX;
+  if (baseX + maxX >= COLS) {
+    baseX -= (baseX + maxX) - (COLS - 1);
+  }
+
+  /*
+   * После коррекции по краям пробуем обычный поворот
+   * и стандартные небольшие wall-kick смещения.
+   */
+  const kickOffsets = [
+    0,
+    -1,
+    1,
+    -2,
+    2
+  ];
+
+  for (const offset of kickOffsets) {
+    const testX = baseX + offset;
+
     if (!collide(current, newRot, testX, currentY)) {
       currentRot = newRot;
       currentX = testX;
@@ -883,20 +912,36 @@ function rotatePiece() {
     }
   }
 
-  // Если ничего не помогло, пробуем сдвиги по Y (полезно для I-фигуры и крайних случаев)
-  const yKicks = current === 'I' ? [-1, 1, -2, 2] : [-1, 1];
-  for (const dy of yKicks) {
-    for (const offset of kicks) {
-      const testX = currentX + offset + baseDeltaX;
-      if (!collide(current, newRot, testX, currentY + dy)) {
+  /*
+   * Для I-фигуры дополнительно разрешаем небольшой
+   * вертикальный kick. Это помогает в ситуациях,
+   * когда горизонтальная/вертикальная палка поворачивается
+   * рядом с уже занятыми клетками.
+   */
+  if (current === 'I') {
+    const verticalKicks = [
+      -1,
+      1,
+      -2,
+      2
+    ];
+
+    for (const dy of verticalKicks) {
+      if (!collide(current, newRot, baseX, currentY + dy)) {
         currentRot = newRot;
-        currentX = testX;
+        currentX = baseX;
         currentY += dy;
         soundRotate();
         return;
       }
     }
   }
+
+  /*
+   * Если ни один вариант не подошёл,
+   * полностью отменяем поворот.
+   */
+  currentRot = oldRot;
 }
 function softDrop() {
   if (over || !current || clearing || paused) return;
