@@ -59,7 +59,6 @@
 
   .wrap { width: 100%; max-width: 400px; display: flex; flex-direction: column; height: 100vh; max-height: 800px; }
 
-  /* ----- ХЕДЕР: иконка + ссылка на канал ----- */
   header { 
     display: flex; 
     justify-content: space-between; 
@@ -126,7 +125,6 @@
 
   .game-area { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
-  /* ----- Верхняя панель: статистика + Hold ----- */
   .top-bar {
     display: flex;
     justify-content: space-between;
@@ -152,7 +150,6 @@
   .stat-label { font-size: 7px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-dim); margin: 0; }
   .stat-value { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 14px; margin: 0; color: var(--ink); }
 
-  /* Hold — компактный, квадратный */
   .hold-panel {
     background: var(--panel-bg);
     border: 1.5px solid var(--panel-border);
@@ -185,7 +182,6 @@
     height: 48px;
   }
 
-  /* ----- Превью следующей фигуры (центр) ----- */
   .next-preview-center {
     display: flex;
     justify-content: center;
@@ -200,7 +196,6 @@
     height: 64px;
   }
 
-  /* ----- Игровое поле (увеличенное) ----- */
   .board-frame {
     position: relative;
     background: var(--board-bg);
@@ -222,7 +217,6 @@
     height: auto;
   }
 
-  /* ---------- OVERLAY ---------- */
   .overlay {
     position: absolute; inset: 0;
     background: var(--panel-bg);
@@ -363,7 +357,6 @@
   </header>
 
   <div class="game-area">
-    <!-- Верхняя панель: статистика + Hold -->
     <div class="top-bar">
       <div class="stats">
         <div class="stat-box"><p class="stat-label">Счёт</p><p class="stat-value" id="score">0</p></div>
@@ -375,17 +368,14 @@
       </div>
     </div>
 
-    <!-- Превью следующей фигуры -->
     <div class="next-preview-center">
       <canvas id="nextCanvasCenter" width="64" height="64"></canvas>
     </div>
 
-    <!-- Игровое поле -->
     <div class="board-frame" id="boardFrame">
       <canvas id="boardCanvas"></canvas>
       <div class="toast" id="toast"></div>
 
-      <!-- ОВЕРЛЕЙ ПАУЗЫ -->
       <div class="overlay" id="pauseOverlay">
         <h2>ПАУЗА</h2>
         <p class="score-text">Счёт: <strong id="pauseScore">0</strong></p>
@@ -406,7 +396,6 @@
         </div>
       </div>
 
-      <!-- ОВЕРЛЕЙ ПРОИГРЫША -->
       <div class="overlay" id="gameOverOverlay">
         <h2>ИГРА ОКОНЧЕНА</h2>
         <p class="score-text">Счёт: <strong id="gameOverScore">0</strong></p>
@@ -442,7 +431,11 @@ const SHAPES = {
   J: [[[0,0],[0,1],[1,1],[2,1]], [[1,0],[2,0],[1,1],[1,2]], [[0,1],[1,1],[2,1],[2,2]], [[1,0],[1,1],[0,2],[1,2]]],
   L: [[[2,0],[0,1],[1,1],[2,1]], [[1,0],[1,1],[1,2],[2,2]], [[0,1],[1,1],[2,1],[0,2]], [[0,0],[1,0],[1,1],[1,2]]]
 };
-const KICKS = [0, -1, 1, -2, 2];
+const WALL_KICKS = {
+  I: { 0: [0, -1, 2, -2], 1: [0, -1, 2, -2], 2: [0, -1, 2, -2], 3: [0, -1, 2, -2] },
+  O: { 0: [0], 1: [0], 2: [0], 3: [0] },
+  default: { 0: [0, -1, 2, -2], 1: [0, 1, -2, 2], 2: [0, 1, -2, 2], 3: [0, -1, 2, -2] }
+};
 const CLEAR_DURATION = 260;
 
 // ---------- State ----------
@@ -852,25 +845,59 @@ function setColumnTarget(target) {
   }
 }
 
+// ---------- ИСПРАВЛЕННЫЙ ПОВОРОТ (с полной поддержкой Wall Kick) ----------
 function rotatePiece() {
   if (over || !current || clearing || paused) return;
-  const nextRot = (currentRot + 1) % 4;
-  // SRS wall kicks: try offsets
-  for (const k of KICKS) {
-    if (!collide(current, nextRot, currentX + k, currentY)) {
-      currentRot = nextRot;
-      currentX += k;
+  
+  const oldRot = currentRot;
+  const newRot = (currentRot + 1) % 4;
+  const shape = SHAPES[current];
+  
+  // Получаем ширину фигуры в старом и новом положении
+  function getShapeWidth(rot) {
+    let minX = Infinity, maxX = -Infinity;
+    shape[rot].forEach(([dx, dy]) => {
+      if (dx < minX) minX = dx;
+      if (dx > maxX) maxX = dx;
+    });
+    return maxX - minX + 1;
+  }
+  
+  const oldWidth = getShapeWidth(oldRot);
+  const newWidth = getShapeWidth(newRot);
+  
+  // Список возможных смещений (X)
+  let kickOffsets = [0];
+  
+  // Если ширина меняется, добавляем смещения для прижатия к краю
+  if (newWidth > oldWidth) {
+    // Фигура становится шире — пробуем сместить влево
+    kickOffsets = [0, -1, -2, 1];
+  } else if (newWidth < oldWidth) {
+    // Фигура становится уже — пробуем сместить вправо
+    kickOffsets = [0, 1, 2, -1];
+  } else {
+    // Ширина не меняется — стандартные кики
+    kickOffsets = [0, -1, 1, -2, 2];
+  }
+  
+  // Пробуем все смещения
+  for (const offset of kickOffsets) {
+    const testX = currentX + offset;
+    if (!collide(current, newRot, testX, currentY)) {
+      currentRot = newRot;
+      currentX = testX;
       soundRotate();
       return;
     }
   }
-  // Если не получилось — дополнительная попытка с вертикальным смещением для I-фигуры
+  
+  // Если ничего не помогло — пробуем смещение по Y (для I-фигуры)
   if (current === 'I') {
-    for (const k of KICKS) {
-      if (!collide(current, nextRot, currentX + k, currentY - 1)) {
-        currentRot = nextRot;
-        currentX += k;
-        currentY -= 1;
+    for (const offset of [-1, 1, -2, 2]) {
+      if (!collide(current, newRot, currentX, currentY + offset)) {
+        currentRot = newRot;
+        currentY += offset;
         soundRotate();
         return;
       }
@@ -1030,7 +1057,7 @@ document.getElementById('gameOverExit')?.addEventListener('click', () => { ensur
 pauseBtn.addEventListener('click', () => { ensureAudio(); togglePause(); });
 holdPanel.addEventListener('click', () => { ensureAudio(); holdPiece(); });
 
-// ---------- Input: touch (свайп вверх = поворот) ----------
+// ---------- Input: touch ----------
 let touchActive = false;
 let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
 let dragStartColumn = 0;
