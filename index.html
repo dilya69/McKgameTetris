@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>TETRIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root[data-theme="dark"] {
+    --bg: #140B2E;
+    --board-bg: #1E1240;
+    --cell-empty: #2A1B54;
+    --ink: #F4EFFF;
+    --ink-dim: #9C90C4;
+    --accent: #2DE1FC;
+    --accent2: #FF3E9A;
+    --accent-fg: #140B2E;
+    --panel-bg: #1E1240;
+    --panel-border: rgba(244,239,255,0.14);
+    --accent-glow: rgba(45,225,252,0.32);
+  }
+  :root[data-theme="light"] {
+    --bg: #F5F4FF;
+    --board-bg: #E7E4FF;
+    --cell-empty: #D6D1FA;
+    --ink: #241A45;
+    --ink-dim: #786F9E;
+    --accent: #FF4D8D;
+    --accent2: #3E7BFF;
+    --accent-fg: #FFFFFF;
+    --panel-bg: #FFFFFF;
+    --panel-border: rgba(36,26,69,0.12);
+    --accent-glow: rgba(255,77,141,0.28);
+  }
+
+  :root {
+    --p-I: #22E1F0; --p-O: #FFD400; --p-T: #B84BFF; --p-S: #37E67B;
+    --p-Z: #FF4757; --p-J: #3E7BFF; --p-L: #FF8A1E;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 14px 14px 10px;
+    user-select: none;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+  }
+
+  .wrap { width: 100%; max-width: 380px; display: flex; flex-direction: column; }
+
+  header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 8px; 
+    gap: 8px; 
+    flex-shrink: 0; 
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .logo-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .logo-icon .placeholder {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 18px;
+    color: var(--accent);
+  }
+
+  .channel-link-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink-dim);
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    transition: all 0.15s;
+  }
+  .channel-link-header:active { transform: scale(0.96); }
+  .channel-link-header .ch-arrow {
+    color: var(--accent);
+    font-size: 12px;
+  }
+  .channel-link-header:hover { color: var(--accent); }
+
+  .icon-row { display: flex; gap: 5px; }
+  .icon-btn {
+    width: 30px; height: 30px; border-radius: 8px;
+    border: 1px solid var(--panel-border); background: var(--panel-bg); color: var(--ink);
+    cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px;
+  }
+  .icon-btn:active { transform: scale(0.92); }
+
+  .game-area { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+  .stats { display: flex; gap: 8px; margin-bottom: 6px; flex-shrink: 0; }
+  .stat-box { flex: 1; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 10px; padding: 4px 8px; text-align: center; }
+  .stat-label { font-size: 8px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-dim); margin: 0 0 1px; }
+  .stat-value { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 16px; margin: 0; color: var(--ink); }
+
+  /* ----- Превью следующей фигуры (центр, БОЛЬШОЕ) ----- */
+  .next-preview-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+    height: 80px;
+  }
+  .next-preview-center canvas {
+    display: block;
+    width: 80px;
+    height: 80px;
+  }
+
+  /* ----- Hold (слева) ШИРОКАЯ РАМКА с БОЛЬШИМ превью ----- */
+  .preview-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .preview-panel {
+    background: var(--panel-bg);
+    border: 1.5px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 6px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    cursor: pointer;
+    min-width: 100px;
+    max-width: 130px;
+  }
+  .preview-panel:active { transform: scale(0.96); }
+  .preview-label { 
+    font-size: 8px; 
+    letter-spacing: 0.3px; 
+    color: var(--ink-dim);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .preview-label .key-hint {
+    font-size: 7px;
+    color: var(--accent);
+    opacity: 0.8;
+    font-weight: 600;
+  }
+  .preview-panel canvas { 
+    display: block; 
+    width: 64px; 
+    height: 64px; 
+  }
+
+  .board-frame {
+    position: relative;
+    background: var(--board-bg);
+    border-radius: 14px;
+    padding: 6px;
+    box-shadow: 0 20px 40px -20px rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    flex: 1;
+    min-height: 0;
+    align-items: flex-start;
+    touch-action: none;
+  }
+  #boardCanvas { 
+    display: block; 
+    border-radius: 6px; 
+    touch-action: none;
+    width: 100%;
+    height: auto;
+  }
+
+  /* ---------- OVERLAY ---------- */
+  .overlay {
+    position: absolute; inset: 0;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    box-shadow: 0 0 60px var(--accent-glow);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 12px;
+    z-index: 20;
+    padding: 24px 20px;
+  }
+  .overlay.show { display: flex; }
+
+  .overlay h2 {
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(14px, 5vw, 18px);
+    margin: 0;
+    line-height: 1.5;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .overlay .score-text {
+    color: var(--ink-dim);
+    margin: 0;
+    font-size: 13px;
+  }
+  .overlay .score-text strong {
+    color: var(--ink);
+    font-size: 18px;
+  }
+
+  .overlay-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 4px;
+  }
+
+  .overlay-channel {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--panel-border);
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  .channel-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 10px;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .channel-link:active { transform: scale(0.96); }
+  .channel-link img {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    object-fit: cover;
+  }
+  .channel-link .channel-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+  .channel-link .channel-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    letter-spacing: 0.5px;
+  }
+  .channel-link .channel-name {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .channel-link .channel-arrow {
+    color: var(--accent);
+    font-size: 16px;
+  }
+
+  button.pill {
+    font-family: 'Inter', sans-serif; font-weight: 700; font-size: 12px;
+    color: var(--accent-fg); background: var(--accent); border: none; border-radius: 8px;
+    padding: 9px 16px; cursor: pointer; white-space: nowrap;
+  }
+  button.pill:active { transform: scale(0.96); }
+
+  button.pill-outline {
+    font-family: 'Inter', sans-serif; font-weight: 700; font-size: 12px;
+    color: var(--ink); background: transparent; border: 1.5px solid var(--accent2); border-radius: 8px;
+    padding: 8px 16px; cursor: pointer; white-space: nowrap;
+  }
+  button.pill-outline:active { transform: scale(0.96); }
+
+  .toast {
+    position: absolute; top: 8px; left: 50%; transform: translate(-50%, -10px);
+    background: var(--accent); color: var(--accent-fg); font-size: 12px; font-weight: 700;
+    padding: 6px 14px; border-radius: 18px; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease; z-index: 15; max-width: 88%; text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <div class="logo-icon" id="logoIcon">
+        <span class="placeholder">T</span>
+        <!-- <img src="icon.png" alt="TETRIS"> -->
+      </div>
+      <a href="https://t.me/ваш_канал" class="channel-link-header" id="headerChannelLink">
+        <span>канал автора</span>
+        <span class="ch-arrow">→</span>
+      </a>
+    </div>
+    <div class="icon-row">
+      <button class="icon-btn" id="restartBtn" aria-label="Перезапустить" title="Новая игра">🔄</button>
+      <button class="icon-btn" id="pauseToggle" aria-label="Пауза" title="Пауза">⏸</button>
+      <button class="icon-btn" id="soundToggle" aria-label="Звук" title="Звук">🔊</button>
+      <button class="icon-btn" id="themeToggle" aria-label="Сменить тему" title="Сменить тему">☾</button>
+    </div>
+  </header>
+
+  <div class="game-area">
+    <div class="stats">
+      <div class="stat-box"><p class="stat-label">Счёт</p><p class="stat-value" id="score">0</p></div>
+      <div class="stat-box"><p class="stat-label">Рекорд</p><p class="stat-value" id="best">0</p></div>
+    </div>
+
+    <!-- Превью следующей фигуры (центр, БОЛЬШОЕ 80x80) -->
+    <div class="next-preview-center">
+      <canvas id="nextCanvasCenter" width="80" height="80"></canvas>
+    </div>
+
+    <div class="preview-row">
+      <div class="preview-panel" id="holdPanel" title="Поменять — удержать (C)">
+        <span class="preview-label">Поменять — <span class="key-hint">удержать (C)</span></span>
+        <canvas id="holdCanvas" width="64" height="64"></canvas>
+      </div>
+      <div style="flex:1;"></div>
+      <div class="preview-panel" style="visibility:hidden;min-width:100px;"></div>
+    </div>
+
+    <div class="board-frame" id="boardFrame">
+      <canvas id="boardCanvas"></canvas>
+      <div class="toast" id="toast"></div>
+
+      <!-- ОВЕРЛЕЙ ПАУЗЫ -->
+      <div class="overlay" id="pauseOverlay">
+        <h2>ПАУЗА</h2>
+        <p class="score-text">Счёт: <strong id="pauseScore">0</strong></p>
+        <div class="overlay-actions">
+          <button class="pill" id="pauseResume">▶ Продолжить</button>
+          <button class="pill-outline" id="pauseRestart">🔄 Заново</button>
+          <button class="pill-outline" id="pauseExit">🚪 Выйти</button>
+        </div>
+        <div class="overlay-channel">
+          <a href="https://t.me/ваш_канал" class="channel-link" id="channelLink">
+            <img src="https://t.me/i/userpic/320/ваш_канал.jpg" alt="канал" id="channelAvatar">
+            <div class="channel-text">
+              <span class="channel-label">Больше игр</span>
+              <span class="channel-name">@ваш_канал</span>
+            </div>
+            <span class="channel-arrow">→</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- ОВЕРЛЕЙ ПРОИГРЫША -->
+      <div class="overlay" id="gameOverOverlay">
+        <h2>ИГРА ОКОНЧЕНА</h2>
+        <p class="score-text">Счёт: <strong id="gameOverScore">0</strong></p>
+        <div class="overlay-actions">
+          <button class="pill" id="gameOverRestart">🔄 Попробовать снова</button>
+          <button class="pill-outline" id="gameOverExit">🚪 Выйти</button>
+        </div>
+        <div class="overlay-channel">
+          <a href="https://t.me/ваш_канал" class="channel-link" id="gameOverChannelLink">
+            <img src="https://t.me/i/userpic/320/ваш_канал.jpg" alt="канал" id="gameOverChannelAvatar">
+            <div class="channel-text">
+              <span class="channel-label">Больше игр</span>
+              <span class="channel-name">@ваш_канал</span>
+            </div>
+            <span class="channel-arrow">→</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Constants ----------
+const COLS = 10, ROWS = 20;
+const PIECE_COLORS = { I: '--p-I', O: '--p-O', T: '--p-T', S: '--p-S', Z: '--p-Z', J: '--p-J', L: '--p-L' };
+const SHAPES = {
+  I: [[[0,1],[1,1],[2,1],[3,1]], [[2,0],[2,1],[2,2],[2,3]], [[0,2],[1,2],[2,2],[3,2]], [[1,0],[1,1],[1,2],[1,3]]],
+  O: [[[1,0],[2,0],[1,1],[2,1]], [[1,0],[2,0],[1,1],[2,1]], [[1,0],[2,0],[1,1],[2,1]], [[1,0],[2,0],[1,1],[2,1]]],
+  T: [[[1,0],[0,1],[1,1],[2,1]], [[1,0],[1,1],[2,1],[1,2]], [[0,1],[1,1],[2,1],[1,2]], [[1,0],[0,1],[1,1],[1,2]]],
+  S: [[[1,0],[2,0],[0,1],[1,1]], [[1,0],[1,1],[2,1],[2,2]], [[1,1],[2,1],[0,2],[1,2]], [[0,0],[0,1],[1,1],[1,2]]],
+  Z: [[[0,0],[1,0],[1,1],[2,1]], [[2,0],[1,1],[2,1],[1,2]], [[0,1],[1,1],[1,2],[2,2]], [[1,0],[0,1],[1,1],[0,2]]],
+  J: [[[0,0],[0,1],[1,1],[2,1]], [[1,0],[2,0],[1,1],[1,2]], [[0,1],[1,1],[2,1],[2,2]], [[1,0],[1,1],[0,2],[1,2]]],
+  L: [[[2,0],[0,1],[1,1],[2,1]], [[1,0],[1,1],[1,2],[2,2]], [[0,1],[1,1],[2,1],[0,2]], [[0,0],[1,0],[1,1],[1,2]]]
+};
+const KICKS = [0, -1, 1, -2, 2];
+const CLEAR_DURATION = 260;
+
+// ---------- State ----------
+let grid, current, currentRot, currentX, currentY, nextType, holdType, canHold;
+let score, best, level, linesTotal, over, softDropping;
+let dropInterval, dropTimer = 0, lastTime = 0;
+let bag = [];
+let muted = false, audioCtx = null;
+let animId = null;
+let clearing = false, clearingRows = [], clearAnim = 0;
+let paused = false;
+
+// ---------- DOM ----------
+const boardCanvas = document.getElementById('boardCanvas');
+const boardCtx = boardCanvas.getContext('2d');
+const nextCanvasCenter = document.getElementById('nextCanvasCenter');
+const nextCtxCenter = nextCanvasCenter.getContext('2d');
+const holdCanvas = document.getElementById('holdCanvas');
+const holdCtx = holdCanvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const bestEl = document.getElementById('best');
+const overlay = document.getElementById('gameOverOverlay');
+const pauseOverlay = document.getElementById('pauseOverlay');
+const gameOverScore = document.getElementById('gameOverScore');
+const pauseScore = document.getElementById('pauseScore');
+const toastEl = document.getElementById('toast');
+const soundBtn = document.getElementById('soundToggle');
+const pauseBtn = document.getElementById('pauseToggle');
+const restartBtn = document.getElementById('restartBtn');
+const holdPanel = document.getElementById('holdPanel');
+const boardFrame = document.getElementById('boardFrame');
+
+let cell = 22;
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toastEl.classList.remove('show'), 1400);
+}
+
+// ---------- Sound ----------
+function ensureAudio() {
+  if (audioCtx) return audioCtx;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    audioCtx = new Ctx();
+  } catch (e) { audioCtx = null; }
+  return audioCtx;
+}
+function playTone(freq, duration, type, gainPeak, sweepTo) {
+  if (muted) return;
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  try {
+    if (ctx.state === 'suspended') ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    const now = ctx.currentTime;
+    if (sweepTo) osc.frequency.exponentialRampToValueAtTime(sweepTo, now + duration);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(gainPeak || 0.1, now + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now + duration + 0.02);
+  } catch (e) { console.error('sound failed', e); }
+}
+function soundMove() { playTone(260, 0.03, 'square', 0.03); }
+function soundRotate() { playTone(400, 0.05, 'triangle', 0.05); }
+function soundLock() { playTone(160, 0.06, 'sine', 0.06); }
+function soundHold() { playTone(500, 0.06, 'triangle', 0.06); }
+function soundHardDrop() { playTone(500, 0.09, 'sine', 0.07, 120); }
+function soundLineClear(n) {
+  const base = 500;
+  for (let i = 0; i < n; i++) setTimeout(() => playTone(base + i * 140, 0.12, 'triangle', 0.09), i * 60);
+}
+function soundGameOver() { playTone(200, 0.4, 'sine', 0.08, 80); }
+function soundPause() { playTone(600, 0.06, 'sine', 0.06); }
+
+async function initSound() {
+  try {
+    const res = await window.storage.get('tetris-sound-muted', false);
+    muted = !!(res && res.value === '1');
+  } catch (e) { muted = false; }
+  soundBtn.textContent = muted ? '🔇' : '🔊';
+}
+soundBtn.addEventListener('click', async () => {
+  muted = !muted;
+  soundBtn.textContent = muted ? '🔇' : '🔊';
+  ensureAudio();
+  try { await window.storage.set('tetris-sound-muted', muted ? '1' : '0', false); } catch (e) { console.error('mute save failed', e); }
+  if (!muted) playTone(440, 0.06, 'sine', 0.07);
+});
+
+// ---------- Theme ----------
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('themeToggle').textContent = theme === 'dark' ? '☾' : '☼';
+  drawBoard(); drawNext(); drawHold();
+}
+async function initTheme() {
+  let theme = 'dark';
+  try {
+    const res = await window.storage.get('tetris-theme', false);
+    if (res && res.value) theme = res.value;
+    else theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+  } catch (e) {
+    theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+  }
+  applyTheme(theme);
+}
+document.getElementById('themeToggle').addEventListener('click', async () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { await window.storage.set('tetris-theme', next, false); } catch (e) { console.error('theme save failed', e); }
+});
+
+// ---------- Personal best ----------
+async function loadBest() {
+  try {
+    const res = await window.storage.get('tetris-best-score', false);
+    best = res && res.value ? (parseInt(res.value) || 0) : 0;
+  } catch (e) { best = 0; }
+  bestEl.textContent = best;
+}
+async function saveBest(value) {
+  best = value;
+  bestEl.textContent = best;
+  try { await window.storage.set('tetris-best-score', String(best), false); } catch (e) { console.error('best save failed', e); }
+}
+
+// ---------- Bag randomizer ----------
+function refillBag() {
+  const types = ['I','O','T','S','Z','J','L'];
+  for (let i = types.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [types[i], types[j]] = [types[j], types[i]];
+  }
+  bag.push(...types);
+}
+function nextFromBag() {
+  if (bag.length === 0) refillBag();
+  return bag.shift();
+}
+
+// ---------- Sizing ----------
+function computeCellSize() {
+  const rect = boardFrame.getBoundingClientRect();
+  const availableWidth = rect.width - 12;
+  const availableHeight = window.innerHeight - rect.top - 14;
+  const cellFromWidth = Math.floor(availableWidth / COLS);
+  const cellFromHeight = Math.floor(availableHeight / ROWS);
+  cell = Math.max(13, Math.min(cellFromWidth, cellFromHeight, 28));
+  const dpr = window.devicePixelRatio || 1;
+  boardCanvas.style.width = (cell * COLS) + 'px';
+  boardCanvas.style.height = (cell * ROWS) + 'px';
+  boardCanvas.width = cell * COLS * dpr;
+  boardCanvas.height = cell * ROWS * dpr;
+  boardCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+// ---------- Color helpers ----------
+function shade(hex, percent) {
+  if (!hex) hex = '#888888';
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const num = parseInt(hex, 16);
+  let r = (num >> 16) + Math.round(255 * percent);
+  let g = ((num >> 8) & 0xFF) + Math.round(255 * percent);
+  let b = (num & 0xFF) + Math.round(255 * percent);
+  r = Math.min(255, Math.max(0, r)); g = Math.min(255, Math.max(0, g)); b = Math.min(255, Math.max(0, b));
+  return `rgb(${r},${g},${b})`;
+}
+
+// ---------- Drawing ----------
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function roundedRectPath(ctx, px, py, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(px + r, py);
+  ctx.arcTo(px + w, py, px + w, py + h, r);
+  ctx.arcTo(px + w, py + h, px, py + h, r);
+  ctx.arcTo(px, py + h, px, py, r);
+  ctx.arcTo(px, py, px + w, py, r);
+  ctx.closePath();
+}
+
+function drawCell(ctx, x, y, size, colorVar, alpha, shrink) {
+  const s = shrink || 0;
+  const pad = 1 + s * size * 0.5;
+  const w = size - pad * 2, h = size - pad * 2;
+  if (w <= 1 || h <= 1) return;
+  const px = x * size + pad, py = y * size + pad;
+  const base = cssVar(colorVar);
+  const r = Math.max(2, 4 * (1 - s));
+
+  ctx.save();
+  ctx.globalAlpha = alpha !== undefined ? alpha : 1;
+  roundedRectPath(ctx, px, py, w, h, r);
+  const grad = ctx.createLinearGradient(px, py, px + w, py + h);
+  grad.addColorStop(0, shade(base, 0.35));
+  grad.addColorStop(0.55, base);
+  grad.addColorStop(1, shade(base, -0.3));
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,0.32)';
+  ctx.beginPath();
+  ctx.ellipse(px + w * 0.32, py + h * 0.28, w * 0.32, h * 0.18, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function ghostY() {
+  let y = currentY;
+  while (!collide(current, currentRot, currentX, y + 1)) y++;
+  return y;
+}
+
+function drawBoard() {
+  if (!grid) return;
+  boardCtx.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
+  const emptyColor = cssVar('--cell-empty');
+  const progress = clearing ? Math.min(1, clearAnim / CLEAR_DURATION) : 0;
+  for (let r = 0; r < ROWS; r++) {
+    const isClearingRow = clearing && clearingRows.includes(r);
+    for (let c = 0; c < COLS; c++) {
+      boardCtx.globalAlpha = 1;
+      boardCtx.fillStyle = emptyColor;
+      const pad = 1;
+      boardCtx.fillRect(c * cell + pad, r * cell + pad, cell - pad * 2, cell - pad * 2);
+      if (grid[r][c]) {
+        if (isClearingRow) {
+          drawCell(boardCtx, c, r, cell, PIECE_COLORS[grid[r][c]], 1 - progress, progress * 0.9);
+        } else {
+          drawCell(boardCtx, c, r, cell, PIECE_COLORS[grid[r][c]]);
+        }
+      }
+    }
+  }
+  if (current && !over && !clearing) {
+    const gy = ghostY();
+    const shape = SHAPES[current][currentRot];
+    shape.forEach(([dx, dy]) => {
+      const x = currentX + dx, y = gy + dy;
+      if (y >= 0) drawCell(boardCtx, x, y, cell, PIECE_COLORS[current], 0.22);
+    });
+    shape.forEach(([dx, dy]) => {
+      const x = currentX + dx, y = currentY + dy;
+      if (y >= 0) drawCell(boardCtx, x, y, cell, PIECE_COLORS[current]);
+    });
+  }
+}
+
+function drawMini(ctx, canvas, type, size) {
+  const s = size || 64;
+  ctx.clearRect(0, 0, s, s);
+  if (!type) return;
+  const shape = SHAPES[type][0];
+  const xs = shape.map(p => p[0]), ys = shape.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const w = maxX - minX + 1, h = maxY - minY + 1;
+  const cellSize = Math.floor((s - 8) / 4.5);
+  const offX = (s - w * cellSize) / 2 - minX * cellSize;
+  const offY = (s - h * cellSize) / 2 - minY * cellSize;
+  shape.forEach(([dx, dy]) => {
+    const gx = (dx * cellSize + offX) / cellSize;
+    const gy = (dy * cellSize + offY) / cellSize;
+    drawCellAtScale(ctx, gx, gy, cellSize, PIECE_COLORS[type]);
+  });
+}
+
+function drawCellAtScale(ctx, gx, gy, size, colorVar) {
+  const pad = 2;
+  const px = gx * size + pad, py = gy * size + pad, w = size - pad * 2, h = size - pad * 2;
+  const base = cssVar(colorVar);
+  ctx.save();
+  roundedRectPath(ctx, px, py, w, h, 3);
+  const grad = ctx.createLinearGradient(px, py, px + w, py + h);
+  grad.addColorStop(0, shade(base, 0.35));
+  grad.addColorStop(0.55, base);
+  grad.addColorStop(1, shade(base, -0.3));
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,0.32)';
+  ctx.beginPath();
+  ctx.ellipse(px + w * 0.32, py + h * 0.28, w * 0.32, h * 0.18, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawNext() { 
+  drawMini(nextCtxCenter, nextCanvasCenter, nextType, 80);
+}
+function drawHold() { 
+  drawMini(holdCtx, holdCanvas, holdType, 64);
+}
+
+// ---------- Game logic ----------
+function collide(type, rot, x, y) {
+  const shape = SHAPES[type][rot];
+  for (const [dx, dy] of shape) {
+    const nx = x + dx, ny = y + dy;
+    if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+    if (ny >= 0 && grid[ny][nx]) return true;
+  }
+  return false;
+}
+
+function spawnPiece(type) {
+  current = type;
+  currentRot = 0;
+  currentX = 3;
+  currentY = -1;
+  canHold = true;
+  if (collide(current, currentRot, currentX, currentY)) {
+    endGame();
+    return false;
+  }
+  return true;
+}
+
+function newPieceFlow() {
+  const type = nextType || nextFromBag();
+  nextType = nextFromBag();
+  drawNext();
+  return spawnPiece(type);
+}
+
+function lockPiece() {
+  const shape = SHAPES[current][currentRot];
+  shape.forEach(([dx, dy]) => {
+    const x = currentX + dx, y = currentY + dy;
+    if (y >= 0) grid[y][x] = current;
+  });
+  soundLock();
+  current = null;
+  checkAndStartClear();
+}
+
+function checkAndStartClear() {
+  const fullRows = [];
+  for (let r = 0; r < ROWS; r++) if (grid[r].every(c => c)) fullRows.push(r);
+  if (fullRows.length) {
+    clearing = true;
+    clearingRows = fullRows;
+    clearAnim = 0;
+  } else {
+    newPieceFlow();
+  }
+}
+
+function finishClear() {
+  const cleared = clearingRows.length;
+  const sorted = [...clearingRows].sort((a, b) => b - a);
+  sorted.forEach(r => { grid.splice(r, 1); grid.unshift(Array(COLS).fill(null)); });
+
+  const cellsCleared = cleared * COLS;
+  const multiplier = { 1: 1, 2: 1.5, 3: 2, 4: 3 }[cleared] || 1;
+  const points = Math.round(cellsCleared * 10 * multiplier);
+  score += points;
+  linesTotal += cleared;
+  scoreEl.textContent = score;
+  if (score > best) saveBest(score);
+
+  const newLevel = Math.floor(linesTotal / 10) + 1;
+  if (newLevel !== level) {
+    level = newLevel;
+    dropInterval = Math.max(90, 800 - (level - 1) * 60);
+  }
+
+  soundLineClear(cleared);
+  showToast((cleared === 4 ? 'Тетрис! ' : '') + '+' + points);
+
+  clearing = false;
+  clearingRows = [];
+  clearAnim = 0;
+  newPieceFlow();
+}
+
+function moveHorizontal(dir, silent) {
+  if (over || !current || clearing || paused) return;
+  if (!collide(current, currentRot, currentX + dir, currentY)) {
+    currentX += dir;
+    if (!silent) soundMove();
+  }
+}
+
+function setColumnTarget(target) {
+  if (over || !current || clearing || paused) return;
+  target = Math.max(0, Math.min(COLS - 1, target));
+  let guard = 0;
+  while (currentX < target && guard < 20) {
+    if (collide(current, currentRot, currentX + 1, currentY)) break;
+    currentX++; guard++;
+  }
+  guard = 0;
+  while (currentX > target && guard < 20) {
+    if (collide(current, currentRot, currentX - 1, currentY)) break;
+    currentX--; guard++;
+  }
+}
+
+function rotatePiece() {
+  if (over || !current || clearing || paused) return;
+  const nextRot = (currentRot + 1) % 4;
+  for (const k of KICKS) {
+    if (!collide(current, nextRot, currentX + k, currentY)) {
+      currentRot = nextRot;
+      currentX += k;
+      soundRotate();
+      return;
+    }
+  }
+}
+
+function softDrop() {
+  if (over || !current || clearing || paused) return;
+  if (!collide(current, currentRot, currentX, currentY + 1)) {
+    currentY++;
+    score += 1;
+    scoreEl.textContent = score;
+  } else {
+    lockPiece();
+  }
+  dropTimer = 0;
+}
+
+function hardDrop() {
+  if (over || !current || clearing || paused) return;
+  let dist = 0;
+  while (!collide(current, currentRot, currentX, currentY + 1)) { currentY++; dist++; }
+  score += dist * 2;
+  scoreEl.textContent = score;
+  if (score > best) saveBest(score);
+  soundHardDrop();
+  lockPiece();
+  dropTimer = 0;
+}
+
+function holdPiece() {
+  if (over || !current || !canHold || clearing || paused) return;
+  soundHold();
+  if (holdType) {
+    const swap = holdType;
+    holdType = current;
+    spawnPiece(swap);
+  } else {
+    holdType = current;
+    newPieceFlow();
+  }
+  canHold = false;
+  drawHold();
+}
+
+function togglePause() {
+  if (over || !current || clearing) return;
+  paused = !paused;
+  soundPause();
+  pauseBtn.textContent = paused ? '▶' : '⏸';
+  if (paused) {
+    pauseScore.textContent = score;
+    pauseOverlay.classList.add('show');
+  } else {
+    pauseOverlay.classList.remove('show');
+  }
+}
+
+function endGame() {
+  over = true;
+  current = null;
+  gameOverScore.textContent = score;
+  overlay.classList.add('show');
+  soundGameOver();
+}
+
+function exitGame() {
+  try {
+    if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.close === 'function') {
+      window.Telegram.WebApp.close();
+      return;
+    }
+  } catch (e) { console.error('telegram close failed', e); }
+  showToast('Доступно внутри Telegram');
+}
+
+function initGame() {
+  grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  score = 0; level = 1; linesTotal = 0; over = false; paused = false;
+  dropInterval = 800; dropTimer = 0; lastTime = performance.now();
+  bag = []; holdType = null; canHold = true;
+  clearing = false; clearingRows = []; clearAnim = 0;
+  scoreEl.textContent = 0;
+  overlay.classList.remove('show');
+  pauseOverlay.classList.remove('show');
+  pauseBtn.textContent = '⏸';
+  nextType = nextFromBag();
+  drawNext(); drawHold();
+  newPieceFlow();
+  drawBoard();
+  if (!animId) animId = requestAnimationFrame(loop);
+}
+
+function loop(now) {
+  const dt = now - lastTime;
+  lastTime = now;
+  
+  if (!paused) {
+    if (clearing) {
+      clearAnim += dt;
+      if (clearAnim >= CLEAR_DURATION) finishClear();
+      drawBoard();
+    } else if (!over && current) {
+      dropTimer += dt;
+      const interval = softDropping ? Math.max(35, dropInterval / 14) : dropInterval;
+      if (dropTimer >= interval) {
+        dropTimer = 0;
+        if (!collide(current, currentRot, currentX, currentY + 1)) {
+          currentY++;
+        } else {
+          lockPiece();
+        }
+      }
+      drawBoard();
+    }
+  }
+  animId = requestAnimationFrame(loop);
+}
+
+// ---------- Input: keyboard ----------
+document.addEventListener('keydown', e => {
+  const codes = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','KeyA','KeyD','KeyS','ShiftLeft','ShiftRight','KeyC','Escape','KeyP'];
+  if (codes.includes(e.code)) e.preventDefault();
+  ensureAudio();
+  if (e.code === 'Escape' || e.code === 'KeyP') { togglePause(); return; }
+  if (paused) return;
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') moveHorizontal(-1);
+  else if (e.code === 'ArrowRight' || e.code === 'KeyD') moveHorizontal(1);
+  else if (e.code === 'ArrowDown' || e.code === 'KeyS') { if (!softDropping) { softDropping = true; softDrop(); } }
+  else if (e.code === 'Space') hardDrop();
+  else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') rotatePiece();
+  else if (e.code === 'KeyC') holdPiece();
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'ArrowDown' || e.code === 'KeyS') softDropping = false;
+});
+
+// ---------- Input: mouse ----------
+boardCanvas.addEventListener('mousedown', e => {
+  if (e.button === 0) { ensureAudio(); hardDrop(); }
+});
+boardCanvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  ensureAudio();
+  rotatePiece();
+});
+
+// ---------- Buttons ----------
+restartBtn.addEventListener('click', () => { ensureAudio(); initGame(); });
+document.getElementById('pauseRestart')?.addEventListener('click', () => { ensureAudio(); initGame(); });
+document.getElementById('pauseExit')?.addEventListener('click', () => { ensureAudio(); exitGame(); });
+document.getElementById('pauseResume')?.addEventListener('click', () => { togglePause(); });
+document.getElementById('gameOverRestart')?.addEventListener('click', () => { ensureAudio(); initGame(); });
+document.getElementById('gameOverExit')?.addEventListener('click', () => { ensureAudio(); exitGame(); });
+pauseBtn.addEventListener('click', () => { ensureAudio(); togglePause(); });
+holdPanel.addEventListener('click', () => { ensureAudio(); holdPiece(); });
+
+// ---------- Input: touch (интерактив по всей площади поля) ----------
+let touchActive = false;
+let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+let dragStartColumn = 0;
+let lastTapTime = 0;
+let tapTimer = null;
+const TAP_MOVE_LIMIT = 10;
+const DOUBLE_TAP_MS = 260;
+let isTouchingBoard = false;
+
+boardCanvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  isTouchingBoard = true;
+  ensureAudio();
+  const t = e.touches[0];
+  touchStartX = t.clientX;
+  touchStartY = t.clientY;
+  touchStartTime = Date.now();
+  dragStartColumn = currentX;
+  softDropping = false;
+}, { passive: false });
+
+boardCanvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!isTouchingBoard || paused) return;
+  const t = e.touches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+
+  const colOffset = Math.round(dx / cell);
+  setColumnTarget(dragStartColumn + colOffset);
+
+  softDropping = dy > 22;
+}, { passive: false });
+
+boardCanvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  isTouchingBoard = false;
+  softDropping = false;
+  if (paused) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+  const dt = Date.now() - touchStartTime;
+  const moved = Math.max(Math.abs(dx), Math.abs(dy));
+
+  if (moved < TAP_MOVE_LIMIT && dt < 400) {
+    const now = Date.now();
+    if (now - lastTapTime < DOUBLE_TAP_MS) {
+      clearTimeout(tapTimer);
+      lastTapTime = 0;
+      hardDrop();
+    } else {
+      lastTapTime = now;
+      tapTimer = setTimeout(() => { rotatePiece(); }, DOUBLE_TAP_MS);
+    }
+  }
+}, { passive: false });
+
+// ---------- Свайп для сворачивания за пределами канваса ----------
+document.addEventListener('touchstart', (e) => {
+  if (e.target === boardCanvas || boardCanvas.contains(e.target)) return;
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+document.addEventListener('touchmove', (e) => {
+  if (e.target === boardCanvas || boardCanvas.contains(e.target)) return;
+}, { passive: true });
+
+document.addEventListener('touchend', (e) => {
+  if (e.target === boardCanvas || boardCanvas.contains(e.target)) return;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (dy > 60) {
+    try {
+      if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.close === 'function') {
+        window.Telegram.WebApp.close();
+      }
+    } catch (err) { /* ignore */ }
+  }
+}, { passive: true });
+
+// ---------- Resize ----------
+function refit() { computeCellSize(); drawBoard(); }
+window.addEventListener('resize', refit);
+window.addEventListener('orientationchange', refit);
+
+(async function start() {
+  try { if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.ready(); } catch (e) {}
+  computeCellSize();
+  await initTheme();
+  await initSound();
+  await loadBest();
+  initGame();
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(refit);
+  }
+  setTimeout(refit, 200);
+})();
+</script>
+</body>
+</html>
