@@ -832,116 +832,106 @@ function moveHorizontal(dir, silent) {
 
 function setColumnTarget(target) {
   if (over || !current || clearing || paused) return;
-  target = Math.max(0, Math.min(COLS - 1, target));
-  let guard = 0;
-  while (currentX < target && guard < 20) {
-    if (collide(current, currentRot, currentX + 1, currentY)) break;
-    currentX++; guard++;
+
+  const shape = SHAPES[current][currentRot];
+
+  let minDX = Infinity;
+  let maxDX = -Infinity;
+
+  for (const [dx] of shape) {
+    minDX = Math.min(minDX, dx);
+    maxDX = Math.max(maxDX, dx);
   }
-  guard = 0;
-  while (currentX > target && guard < 20) {
+
+  let targetX = target - minDX;
+
+  if (targetX + minDX < 0) {
+    targetX -= targetX + minDX;
+  }
+
+  if (targetX + maxDX >= COLS) {
+    targetX -= (targetX + maxDX) - (COLS - 1);
+  }
+
+  while (currentX < targetX) {
+    if (collide(current, currentRot, currentX + 1, currentY)) break;
+    currentX++;
+  }
+
+  while (currentX > targetX) {
     if (collide(current, currentRot, currentX - 1, currentY)) break;
-    currentX--; guard++;
+    currentX--;
   }
 }
-
 // ---------- ИСПРАВЛЕННЫЙ ПОВОРОТ (с полной поддержкой Wall Kick) ----------
 function rotatePiece() {
   if (over || !current || clearing || paused) return;
 
   const oldRot = currentRot;
   const newRot = (currentRot + 1) % 4;
+
+  const oldX = currentX;
+  const oldY = currentY;
+
   const shape = SHAPES[current][newRot];
 
-  /*
-   * ВАЖНО:
-   * currentX — это координата начала системы координат фигуры,
-   * а не обязательно координата её самой левой клетки.
-   *
-   * Поэтому после поворота нельзя ориентироваться только
-   * на ширину старой/новой фигуры.
-   *
-   * Сначала смотрим реальные dx новой ориентации.
-   */
-  let minX = Infinity;
-  let maxX = -Infinity;
+  let minDX = Infinity;
+  let maxDX = -Infinity;
+  let minDY = Infinity;
+  let maxDY = -Infinity;
 
-  for (const [dx] of shape) {
-    if (dx < minX) minX = dx;
-    if (dx > maxX) maxX = dx;
+  for (const [dx, dy] of shape) {
+    minDX = Math.min(minDX, dx);
+    maxDX = Math.max(maxDX, dx);
+    minDY = Math.min(minDY, dy);
+    maxDY = Math.max(maxDY, dy);
   }
 
-  /*
-   * Сначала принудительно помещаем НОВУЮ ориентацию
-   * внутрь игрового поля.
-   *
-   * Это решает баг:
-   * горизонтальная I-фигура стоит у края -> поворот ->
-   * игра продолжает считать старую горизонтальную позицию.
-   */
-  let baseX = currentX;
+  let newX = currentX;
+  let newY = currentY;
 
-  if (baseX + minX < 0) {
-    baseX -= baseX + minX;
+  // Не даём фигуре вылезти слева
+  if (newX + minDX < 0) {
+    newX -= newX + minDX;
   }
 
-  if (baseX + maxX >= COLS) {
-    baseX -= (baseX + maxX) - (COLS - 1);
+  // Не даём фигуре вылезти справа
+  if (newX + maxDX >= COLS) {
+    newX -= (newX + maxDX) - (COLS - 1);
   }
 
-  /*
-   * После коррекции по краям пробуем обычный поворот
-   * и стандартные небольшие wall-kick смещения.
-   */
-  const kickOffsets = [
-    0,
-    -1,
-    1,
-    -2,
-    2
+  // Не даём фигуре вылезти снизу
+  if (newY + maxDY >= ROWS) {
+    newY -= (newY + maxDY) - (ROWS - 1);
+  }
+
+  const kicks = [
+    [0, 0],
+    [-1, 0],
+    [1, 0],
+    [-2, 0],
+    [2, 0],
+    [0, -1],
+    [0, 1]
   ];
 
-  for (const offset of kickOffsets) {
-    const testX = baseX + offset;
+  for (const [kx, ky] of kicks) {
+    const testX = newX + kx;
+    const testY = newY + ky;
 
-    if (!collide(current, newRot, testX, currentY)) {
+    if (!collide(current, newRot, testX, testY)) {
       currentRot = newRot;
       currentX = testX;
+      currentY = testY;
+
       soundRotate();
       return;
     }
   }
 
-  /*
-   * Для I-фигуры дополнительно разрешаем небольшой
-   * вертикальный kick. Это помогает в ситуациях,
-   * когда горизонтальная/вертикальная палка поворачивается
-   * рядом с уже занятыми клетками.
-   */
-  if (current === 'I') {
-    const verticalKicks = [
-      -1,
-      1,
-      -2,
-      2
-    ];
-
-    for (const dy of verticalKicks) {
-      if (!collide(current, newRot, baseX, currentY + dy)) {
-        currentRot = newRot;
-        currentX = baseX;
-        currentY += dy;
-        soundRotate();
-        return;
-      }
-    }
-  }
-
-  /*
-   * Если ни один вариант не подошёл,
-   * полностью отменяем поворот.
-   */
   currentRot = oldRot;
+  currentX = oldX;
+  currentY = oldY;
 }
 function softDrop() {
   if (over || !current || clearing || paused) return;
@@ -1110,7 +1100,17 @@ boardCanvas.addEventListener('touchstart', e => {
   touchStartX = t.clientX;
   touchStartY = t.clientY;
   touchStartTime = Date.now();
-  dragStartColumn = currentX;
+  if (current) {
+  const shape = SHAPES[current][currentRot];
+
+  let minDX = Infinity;
+
+  for (const [dx] of shape) {
+    minDX = Math.min(minDX, dx);
+  }
+
+  dragStartColumn = currentX + minDX;
+}
   softDropping = false;
 }, { passive: false });
 
