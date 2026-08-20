@@ -74,8 +74,8 @@
     gap: 8px;
   }
   .logo-icon {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     flex-shrink: 0;
     border-radius: 8px;
     background: var(--panel-bg);
@@ -287,8 +287,8 @@
   }
   .channel-link:active { transform: scale(0.96); }
   .channel-link img {
-    width: 24px;
-    height: 24px;
+    width: 36px;
+    height: 36px;
     border-radius: 4px;
     object-fit: cover;
   }
@@ -992,16 +992,29 @@ function endGame() {
   soundGameOver();
 }
 
-function exitGame() {
+async function exitGame() {
+  // Сохраняем текущий рекорд перед выходом
+  if (score > best) {
+    await saveBest(score);
+  } else {
+    await saveBest(best);
+  }
+
   try {
-    if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.close === 'function') {
+    if (
+      window.Telegram &&
+      window.Telegram.WebApp &&
+      typeof window.Telegram.WebApp.close === 'function'
+    ) {
       window.Telegram.WebApp.close();
       return;
     }
-  } catch (e) { console.error('telegram close failed', e); }
+  } catch (e) {
+    console.error('telegram close failed', e);
+  }
+
   showToast('Доступно внутри Telegram');
 }
-
 function initGame() {
   grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
   score = 0; level = 1; linesTotal = 0; over = false; paused = false;
@@ -1173,6 +1186,20 @@ function refit() { computeCellSize(); drawBoard(); }
 window.addEventListener('resize', refit);
 window.addEventListener('orientationchange', refit);
 
+  window.addEventListener('beforeunload', () => {
+  try {
+    if (score > best) {
+      window.storage.set(
+        'tetris-best-score',
+        String(score),
+        false
+      );
+    }
+  } catch (e) {
+    console.error('best score save failed', e);
+  }
+});
+  
 (async function start() {
   try { if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.ready(); } catch (e) {}
   computeCellSize();
