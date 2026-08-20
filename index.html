@@ -558,16 +558,71 @@ document.getElementById('themeToggle').addEventListener('click', async () => {
 
 // ---------- Personal best ----------
 async function loadBest() {
+  let storageBest = 0;
+  let backupBest = 0;
+
+  // Основное хранилище
   try {
-    const res = await window.storage.get('tetris-best-score', false);
-    best = res && res.value ? (parseInt(res.value) || 0) : 0;
-  } catch (e) { best = 0; }
+    const res = await window.storage.get(
+      'tetris-best-score',
+      false
+    );
+
+    if (res && res.value) {
+      storageBest = parseInt(res.value) || 0;
+    }
+  } catch (e) {
+    console.error('best load error:', e);
+  }
+
+  // Резервное хранилище браузера
+  try {
+    backupBest = parseInt(
+      localStorage.getItem('tetris-best-score-backup')
+    ) || 0;
+  } catch (e) {
+    console.error('backup best load error:', e);
+  }
+
+  // Берём максимальный результат
+  best = Math.max(storageBest, backupBest);
+
   bestEl.textContent = best;
+
+  // Если резерв оказался новее — записываем обратно
+  if (best > storageBest) {
+    try {
+      await window.storage.set(
+        'tetris-best-score',
+        String(best),
+        false
+      );
+    } catch (e) {
+      console.error('best restore error:', e);
+    }
+  }
 }
 async function saveBest(value) {
+  value = Number(value) || 0;
+
+  if (value <= best) {
+    bestEl.textContent = best;
+    return;
+  }
+
   best = value;
   bestEl.textContent = best;
-  try { await window.storage.set('tetris-best-score', String(best), false); } catch (e) { console.error('best save failed', e); }
+
+  try {
+    await window.storage.set(
+      'tetris-best-score',
+      String(best),
+      false
+    );
+    console.log('BEST SAVED:', best);
+  } catch (e) {
+    console.error('BEST SAVE ERROR:', e);
+  }
 }
 
 // ---------- Bag randomizer ----------
@@ -984,21 +1039,28 @@ function togglePause() {
   }
 }
 
-function endGame() {
+async function endGame() {
   over = true;
   current = null;
+
+  // Обязательно сохраняем рекорд при проигрыше
+  if (score > best) {
+    await saveBest(score);
+  }
+
   gameOverScore.textContent = score;
   overlay.classList.add('show');
   soundGameOver();
 }
 
 async function exitGame() {
-  // Сохраняем текущий рекорд перед выходом
+  // Сначала сохраняем рекорд
   if (score > best) {
     await saveBest(score);
-  } else {
-    await saveBest(best);
   }
+
+  // Небольшая пауза, чтобы storage успел записать данные
+  await new Promise(resolve => setTimeout(resolve, 100));
 
   try {
     if (
@@ -1197,6 +1259,27 @@ window.addEventListener('orientationchange', refit);
     }
   } catch (e) {
     console.error('best score save failed', e);
+  }
+});
+
+  // ---------- Save best before leaving ----------
+window.addEventListener('pagehide', () => {
+  try {
+    if (score > best) {
+      // Синхронно обновляем локальный резерв
+      localStorage.setItem(
+        'tetris-best-score-backup',
+        String(score)
+      );
+    }
+
+    // Сохраняем и текущий best
+    localStorage.setItem(
+      'tetris-best-score-backup',
+      String(Math.max(score, best))
+    );
+  } catch (e) {
+    console.error('pagehide save failed:', e);
   }
 });
   
